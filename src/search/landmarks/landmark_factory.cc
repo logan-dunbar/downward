@@ -18,6 +18,10 @@
 using namespace std;
 
 namespace landmarks {
+LandmarkFactory::LandmarkFactory(const options::Options &opts)
+    : log(utils::get_log_from_options(opts)), lm_graph(nullptr) {
+}
+
 /*
   TODO: Update this comment
 
@@ -59,15 +63,23 @@ shared_ptr<LandmarkGraph> LandmarkFactory::compute_lm_graph(
     generate_operators_lookups(task_proxy);
     generate_landmarks(task);
 
-    utils::g_log << "Landmarks generation time: " << lm_generation_timer << endl;
-    if (lm_graph->get_num_landmarks() == 0)
-        utils::g_log << "Warning! No landmarks found. Task unsolvable?" << endl;
-    else {
-        utils::g_log << "Discovered " << lm_graph->get_num_landmarks()
-                     << " landmarks, of which " << lm_graph->get_num_disjunctive_landmarks()
-                     << " are disjunctive and "
-                     << lm_graph->get_num_conjunctive_landmarks() << " are conjunctive." << endl;
-        utils::g_log << lm_graph->get_num_edges() << " edges" << endl;
+    if (log.is_at_least_normal()) {
+        log << "Landmarks generation time: " << lm_generation_timer << endl;
+        if (lm_graph->get_num_landmarks() == 0) {
+            if (log.is_warning()) {
+                log << "Warning! No landmarks found. Task unsolvable?" << endl;
+            }
+        } else {
+            log << "Discovered " << lm_graph->get_num_landmarks()
+                << " landmarks, of which " << lm_graph->get_num_disjunctive_landmarks()
+                << " are disjunctive and "
+                << lm_graph->get_num_conjunctive_landmarks() << " are conjunctive." << endl;
+            log << lm_graph->get_num_edges() << " edges" << endl;
+        }
+    }
+
+    if (log.is_at_least_debug()) {
+        dump_landmark_graph(task_proxy, *lm_graph, log);
     }
     return lm_graph;
 }
@@ -91,12 +103,12 @@ void LandmarkFactory::edge_add(LandmarkNode &from, LandmarkNode &to,
     reduce cycles. If the edge is already present, the stronger edge type wins.
     */
     assert(&from != &to);
-    assert(from.parents.find(&to) == from.parents.end() || type <= EdgeType::REASONABLE);
-    assert(to.children.find(&from) == to.children.end() || type <= EdgeType::REASONABLE);
 
     if (type == EdgeType::REASONABLE || type == EdgeType::OBEDIENT_REASONABLE) { // simple cycle test
         if (from.parents.find(&to) != from.parents.end()) { // Edge in opposite direction exists
-            //utils::g_log << "edge in opposite direction exists" << endl;
+            if (log.is_at_least_debug()) {
+                log << "edge in opposite direction exists" << endl;
+            }
             if (from.parents.find(&to)->second > type) // Stronger order present, return
                 return;
             // Edge in opposite direction is weaker, delete
@@ -120,14 +132,18 @@ void LandmarkFactory::edge_add(LandmarkNode &from, LandmarkNode &to,
         assert(to.parents.find(&from) == to.parents.end());
         from.children.emplace(&to, type);
         to.parents.emplace(&from, type);
-        //utils::g_log << "added parent with address " << &from << endl;
+        if (log.is_at_least_debug()) {
+            log << "added parent with address " << &from << endl;
+        }
     }
     assert(from.children.find(&to) != from.children.end());
     assert(to.parents.find(&from) != to.parents.end());
 }
 
 void LandmarkFactory::discard_all_orderings() {
-    utils::g_log << "Removing all orderings." << endl;
+    if (log.is_at_least_normal()) {
+        log << "Removing all orderings." << endl;
+    }
     for (auto &node : lm_graph->get_nodes()) {
         node->children.clear();
         node->parents.clear();
@@ -144,39 +160,48 @@ void LandmarkFactory::mk_acyclic_graph() {
     // [Malte] Commented out the following assertion because
     // the old method for this is no longer available.
     // assert(acyclic_node_set.size() == number_of_landmarks());
-    utils::g_log << "Removed " << removed_edges
-                 << " reasonable or obedient reasonable orders" << endl;
+    if (log.is_at_least_normal()) {
+        log << "Removed " << removed_edges
+            << " reasonable or obedient reasonable orders" << endl;
+    }
 }
 
-bool LandmarkFactory::remove_first_weakest_cycle_edge(LandmarkNode *cur,
-                                                      list<pair<LandmarkNode *, EdgeType>> &path,
-                                                      list<pair<LandmarkNode *, EdgeType>>::iterator it) {
-    LandmarkNode *parent_p = 0;
-    LandmarkNode *child_p = 0;
-    for (list<pair<LandmarkNode *, EdgeType>>::iterator it2 = it; it2
-         != path.end(); ++it2) {
+void LandmarkFactory::remove_first_weakest_cycle_edge(
+    list<pair<LandmarkNode *, EdgeType>> &path,
+    list<pair<LandmarkNode *, EdgeType>>::iterator it) {
+    LandmarkNode *from = path.back().first;
+    LandmarkNode *to = it->first;
+    EdgeType weakest_edge = path.back().second;
+    for (list<pair<LandmarkNode *, EdgeType>>::iterator it2 = it;
+         it2 != prev(path.end()); ++it2) {
         EdgeType edge = it2->second;
-        if (edge == EdgeType::REASONABLE || edge == EdgeType::OBEDIENT_REASONABLE) {
-            parent_p = it2->first;
-            if (*it2 == path.back()) {
-                child_p = cur;
-                break;
-            } else {
-                list<pair<LandmarkNode *, EdgeType>>::iterator child_it = it2;
-                ++child_it;
-                child_p = child_it->first;
-            }
-            if (edge == EdgeType::OBEDIENT_REASONABLE)
-                break;
-            // else no break since o_r order could still appear in list
+        if (edge < weakest_edge) {
+            from = it2->first;
+            to = next(it2)->first;
+            weakest_edge = edge;
+        }
+        if (weakest_edge == EdgeType::OBEDIENT_REASONABLE) {
+            break;
         }
     }
-    assert(parent_p != 0 && child_p != 0);
-    assert(parent_p->children.find(child_p) != parent_p->children.end());
-    assert(child_p->parents.find(parent_p) != child_p->parents.end());
-    parent_p->children.erase(child_p);
-    child_p->parents.erase(parent_p);
-    return true;
+    /*
+      If the weakest ordering in a cycle is natural (or stronger), this
+      indicates that the problem at hand is unsolvable. We signal this by
+      clearing the first achievers of all landmarks present in that cycle.
+      We assert here that (first) achievers were calculated beforehand to make
+      sure that this information is not overwritten later on.
+    */
+    assert(achievers_calculated);
+    if (weakest_edge > EdgeType::REASONABLE) {
+        for (list<pair<LandmarkNode *, EdgeType>>::iterator it2 = it;
+             it2 != path.end(); ++it2) {
+            it2->first->get_landmark().first_achievers.clear();
+        }
+    }
+    assert(from->children.find(to) != from->children.end());
+    assert(to->parents.find(from) != to->parents.end());
+    from->children.erase(to);
+    to->parents.erase(from);
 }
 
 int LandmarkFactory::loop_acyclic_graph(LandmarkNode &lmn,
@@ -197,8 +222,7 @@ int LandmarkFactory::loop_acyclic_graph(LandmarkNode &lmn,
             }
             assert(it != path.end());
             // remove edge from graph
-            remove_first_weakest_cycle_edge(cur, path, it);
-            //assert(removed);
+            remove_first_weakest_cycle_edge(path, it);
             ++nr_removed;
 
             path.clear();
@@ -263,13 +287,19 @@ void LandmarkFactory::generate_operators_lookups(const TaskProxy &task_proxy) {
     }
 }
 
-void _add_use_orders_option_to_parser(OptionParser &parser) {
+void add_landmark_factory_options_to_parser(options::OptionParser &parser) {
+    utils::add_log_options_to_parser(parser);
+}
+
+void add_use_orders_option_to_parser(
+    OptionParser &parser) {
     parser.add_option<bool>("use_orders",
                             "use orders between landmarks",
                             "true");
 }
 
-void _add_only_causal_landmarks_option_to_parser(OptionParser &parser) {
+void add_only_causal_landmarks_option_to_parser(
+    OptionParser &parser) {
     parser.add_option<bool>("only_causal_landmarks",
                             "keep only causal landmarks",
                             "false");

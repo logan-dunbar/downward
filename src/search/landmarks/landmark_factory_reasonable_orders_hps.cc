@@ -14,18 +14,26 @@
 using namespace std;
 namespace landmarks {
 LandmarkFactoryReasonableOrdersHPS::LandmarkFactoryReasonableOrdersHPS(const Options &opts)
-    : lm_factory(opts.get<shared_ptr<LandmarkFactory>>("lm_factory")) {
+    : LandmarkFactory(opts),
+      lm_factory(opts.get<shared_ptr<LandmarkFactory>>("lm_factory")) {
 }
 
 void LandmarkFactoryReasonableOrdersHPS::generate_landmarks(const shared_ptr<AbstractTask> &task) {
-    utils::g_log << "Building a landmark graph with reasonable orders." << endl;
+    if (log.is_at_least_normal()) {
+        log << "Building a landmark graph with reasonable orders." << endl;
+    }
 
     lm_graph = lm_factory->compute_lm_graph(task);
+    achievers_calculated = lm_factory->achievers_are_calculated();
 
     TaskProxy task_proxy(*task);
-    utils::g_log << "approx. reasonable orders" << endl;
+    if (log.is_at_least_normal()) {
+        log << "approx. reasonable orders" << endl;
+    }
     approximate_reasonable_orders(task_proxy, false);
-    utils::g_log << "approx. obedient reasonable orders" << endl;
+    if (log.is_at_least_normal()) {
+        log << "approx. obedient reasonable orders" << endl;
+    }
     approximate_reasonable_orders(task_proxy, true);
 
     mk_acyclic_graph();
@@ -378,7 +386,7 @@ static shared_ptr<LandmarkFactory> _parse(OptionParser &parser) {
         "Adds reasonable orders and obedient reasonable orders "
         "described in the following paper" +
         utils::format_journal_reference(
-            {"Jörg Hoffman", "JuliePorteous", "LauraSebastia"},
+            {"Jörg Hoffmann", "Julie Porteous", "Laura Sebastia"},
             "Ordered Landmarks in Planning",
             "https://jair.org/index.php/jair/article/view/10390/24882",
             "Journal of Artificial Intelligence Research",
@@ -386,6 +394,7 @@ static shared_ptr<LandmarkFactory> _parse(OptionParser &parser) {
             "215-278",
             "2004"));
     parser.add_option<shared_ptr<LandmarkFactory>>("lm_factory");
+    add_landmark_factory_options_to_parser(parser);
     Options opts = parser.parse();
 
     // TODO: correct?

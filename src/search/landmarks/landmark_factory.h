@@ -3,6 +3,8 @@
 
 #include "landmark_graph.h"
 
+#include "../utils/logging.h"
+
 #include <list>
 #include <map>
 #include <memory>
@@ -39,9 +41,15 @@ public:
     virtual bool computes_reasonable_orders() const = 0;
     virtual bool supports_conditional_effects() const = 0;
 
+    bool achievers_are_calculated() const {
+        return achievers_calculated;
+    }
+
 protected:
-    LandmarkFactory() = default;
+    explicit LandmarkFactory(const options::Options &opts);
+    mutable utils::LogProxy log;
     std::shared_ptr<LandmarkGraph> lm_graph;
+    bool achievers_calculated = false;
 
     void edge_add(LandmarkNode &from, LandmarkNode &to, EdgeType type);
 
@@ -64,14 +72,15 @@ private:
 
     int loop_acyclic_graph(LandmarkNode &lmn,
                            std::unordered_set<LandmarkNode *> &acyclic_node_set);
-    bool remove_first_weakest_cycle_edge(LandmarkNode *cur,
-                                         std::list<std::pair<LandmarkNode *, EdgeType>> &path,
-                                         std::list<std::pair<LandmarkNode *, EdgeType>>::iterator it);
+    void remove_first_weakest_cycle_edge(
+        std::list<std::pair<LandmarkNode *, EdgeType>> &path,
+        std::list<std::pair<LandmarkNode *, EdgeType>>::iterator it);
     void generate_operators_lookups(const TaskProxy &task_proxy);
 };
 
-extern void _add_use_orders_option_to_parser(options::OptionParser &parser);
-extern void _add_only_causal_landmarks_option_to_parser(options::OptionParser &parser);
+extern void add_landmark_factory_options_to_parser(options::OptionParser &parser);
+extern void add_use_orders_option_to_parser(options::OptionParser &parser);
+extern void add_only_causal_landmarks_option_to_parser(options::OptionParser &parser);
 }
 
 #endif
