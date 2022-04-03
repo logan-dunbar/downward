@@ -185,7 +185,7 @@ public:
 };
 
 
-class FactsProxyIterator {
+class FactsProxyIterator : public std::iterator<std::forward_iterator_tag, FactProxy> {
     const AbstractTask *task;
     int var_id;
     int value;

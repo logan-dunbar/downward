@@ -47,6 +47,8 @@ static shared_ptr<SearchEngine> parse_cmd_line_aux(
     int num_previously_generated_plans = 0;
     bool is_part_of_anytime_portfolio = false;
     options::Predefinitions predefinitions;
+    string shared_memory_name;
+    bool no_cache = false;
 
     shared_ptr<SearchEngine> engine;
     /*
@@ -113,6 +115,13 @@ static shared_ptr<SearchEngine> parse_cmd_line_aux(
             registry.handle_predefinition(arg.substr(2),
                                           sanitize_arg_string(args[i]),
                                           predefinitions, dry_run);
+        } else if (arg == "--shared-memory") {
+            if (is_last)
+                throw ArgError("missing argument after --shared-memory");
+            ++i;
+            shared_memory_name = args[i];
+        } else if (arg == "--no-cache") {
+            no_cache = true;
         } else {
             throw ArgError("unknown option " + arg);
         }
@@ -123,6 +132,10 @@ static shared_ptr<SearchEngine> parse_cmd_line_aux(
         plan_manager.set_plan_filename(plan_filename);
         plan_manager.set_num_previously_generated_plans(num_previously_generated_plans);
         plan_manager.set_is_part_of_anytime_portfolio(is_part_of_anytime_portfolio);
+        if (!shared_memory_name.empty())
+            engine->set_shared_memory_name(shared_memory_name);
+        if (no_cache)
+            engine->set_no_cache(no_cache);
     }
     return engine;
 }
