@@ -442,11 +442,18 @@ fast_downward_plugin(
 )
 
 fast_downward_plugin(
+    NAME PYTHON_CLIENT
+    HELP "Client to talk to python"
+    SOURCES
+        search_engines/client
+)
+
+fast_downward_plugin(
     NAME LAZY_SEARCH
     HELP "Lazy search algorithm"
     SOURCES
         search_engines/lazy_search
-    DEPENDS ORDERED_SET SUCCESSOR_GENERATOR
+    DEPENDS ORDERED_SET SUCCESSOR_GENERATOR PYTHON_CLIENT
     DEPENDENCY_ONLY
 )
 

@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <limits>
 #include <vector>
+#include <iostream>
+#include <unistd.h>
 
 using namespace std;
 
@@ -30,7 +32,10 @@ LazySearch::LazySearch(const Options &opts)
       current_operator_id(OperatorID::no_operator),
       current_g(0),
       current_real_g(0),
-      current_eval_context(current_state, 0, true, &statistics) {
+      current_eval_context(current_state, 0, true, &statistics)
+    //   python_client(socket_communication::Client("127.0.0.1", 5002)),
+    //   use_server(false) 
+      {
     /*
       We initialize current_eval_context in such a way that the initial node
       counts as "preferred".
@@ -43,6 +48,28 @@ void LazySearch::set_preferred_operator_evaluators(
 }
 
 void LazySearch::initialize() {
+    SearchEngine::initialize();
+    
+    // Check that connection works
+    // python_client.Send("Hello hello!");
+    // std::string answer = client.Receive();
+    // std::cout << "[Server]: " << answer << std::endl;
+    // stringstream ss;
+    // ss << "Init; ";
+    // current_state.unpack();
+    // for (size_t i = 0; i < current_state.size(); i++)
+    // {
+    //     ss << current_state[i].get_name() + "; ";
+    // }
+    
+    // // for(int i : current_state.get_unpacked_values()) {
+    // //     ss << current_state[i].get_name() + ", ";
+    // // }
+    
+
+    // python_client.Send(ss.str());
+    // std::string answer = python_client.Receive();
+    // this->use_server = answer.find("True") != std::string::npos;
     utils::g_log << "Conducting lazy best first search, (real) bound = " << bound << endl;
 
     assert(open_list);
@@ -189,8 +216,31 @@ SearchStatus LazySearch::step() {
                 }
             }
             node.close();
-            if (check_goal_and_set_plan(current_state))
+            // python_client.Send("Checking goal!");
+            if (check_goal_and_set_plan(current_state)) {
                 return SOLVED;
+            }
+            
+            // if (this->use_server) {
+            //     stringstream ss;
+            //     current_state.unpack();
+            //     for (size_t i = 0; i < current_state.size(); i++)
+            //     {
+            //         ss << current_state[i].get_name() + "; ";
+            //     }
+
+            //     python_client.Send(ss.str());
+            //     std::string answer = python_client.Receive();
+
+            //     if (answer.find("True") != std::string::npos){
+            //         utils::g_log << "Solution found!" << endl;
+            //         Plan plan;
+            //         search_space.trace_path(current_state, plan);
+            //         set_plan(plan);
+            //         return SOLVED;
+            //     }
+            // }
+
             if (search_progress.check_progress(current_eval_context)) {
                 statistics.print_checkpoint_line(current_g);
                 reward_progress();

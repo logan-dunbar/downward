@@ -17,6 +17,11 @@
 #include <optional.hh>
 #include <set>
 
+#include <boost/algorithm/string/join.hpp>
+
+#include <algorithm>
+#include <random>
+
 using namespace std;
 
 namespace eager_search {
@@ -36,6 +41,8 @@ EagerSearch::EagerSearch(const Options &opts)
 }
 
 void EagerSearch::initialize() {
+    SearchEngine::initialize();
+
     utils::g_log << "Conducting best first search"
                  << (reopen_closed_nodes ? " with" : " without")
                  << " reopening closed nodes, (real) bound = " << bound
@@ -169,8 +176,9 @@ SearchStatus EagerSearch::step() {
     }
 
     const State &s = node->get_state();
-    if (check_goal_and_set_plan(s))
+    if (check_goal_and_set_plan(s)) {
         return SOLVED;
+    }
 
     vector<OperatorID> applicable_ops;
     successor_generator.generate_applicable_ops(s, applicable_ops);

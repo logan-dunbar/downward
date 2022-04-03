@@ -10,6 +10,7 @@
 #include "../search_space.h"
 
 #include "../utils/rng.h"
+#include "client.h"
 
 #include <memory>
 #include <vector>
@@ -38,6 +39,8 @@ protected:
     int current_g;
     int current_real_g;
     EvaluationContext current_eval_context;
+    socket_communication::Client python_client;
+    bool use_server;
 
     virtual void initialize() override;
     virtual SearchStatus step() override;
